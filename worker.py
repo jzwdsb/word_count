@@ -38,7 +38,7 @@ def map_task(
                 os.makedirs(output_dir)
             # Write each bucket to an intermediate file
             for bucket_id, bucket in enumerate(buckets):
-                with open(f"{output_dir}/mr-{map_task_id}-{bucket_id}", "w") as f:
+                with open(f"{output_dir}/mr-{map_task_id}-{bucket_id}", "a") as f:
                     for word in bucket:
                         f.write(word + "\n")
 
@@ -70,16 +70,18 @@ def reduce_task(
         for word, count in word_counts.items():
             f.write(f"{word} {count}\n")
 
-def parse_args()-> tuple[str, int]:
+
+def parse_args() -> tuple[str, int, int]:
     if len(sys.argv) == 1:
         print("driver host and port not specified, use default localhost:8080")
-        return "localhost", 8080
-    if len(sys.argv) != 3:
-        print("Usage: python3 worker.py <worker_id> <port>")
+        return "localhost", 8080, 0
+    if len(sys.argv) != 4:
+        print("Usage: python3 worker.py <driver_host> <driver_port> <delay_seconds>")
         sys.exit(0)
-    return sys.argv[1], int(sys.argv[2])
+    return (sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
 
-def run(host: str, port: int):
+
+def run(host: str, port: int, delay_seconds: int):
     while True:
         try:
             conn = http.client.HTTPConnection(host=host, port=port)
@@ -89,13 +91,13 @@ def run(host: str, port: int):
             resp = json.loads(data)
             if resp["task_type"] == "map":
                 map_task(resp["input_files"], resp["task_id"], resp["num_reduce_tasks"])
-                pass
             elif resp["task_type"] == "reduce":
                 reduce_task(resp["bucket_id"], resp["map_task_ids"])
-                pass
-            time.sleep(10)
+            else:
+                print(f"unknown task type {resp['task_type']}, skip")
+            time.sleep(delay_seconds)
         except Exception as e:
-            print("server closed")
+            print("driver closed")
             break
 
 
@@ -129,7 +131,7 @@ def wait_driver_exit():
 
 
 if __name__ == "__main__":
-    driver_addr, driver_port = parse_args()
+    driver_addr, driver_port, delay_seconds = parse_args()
     wait_driver_start()
-    run(driver_addr, driver_port)
+    run(driver_addr, driver_port, delay_seconds)
     wait_driver_exit()
